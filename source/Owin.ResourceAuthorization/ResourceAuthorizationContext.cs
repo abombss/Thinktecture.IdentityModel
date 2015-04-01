@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
+using System.Threading;
 
 namespace Thinktecture.IdentityModel.Owin.ResourceAuthorization
 {
@@ -10,8 +11,9 @@ namespace Thinktecture.IdentityModel.Owin.ResourceAuthorization
         public IEnumerable<Claim> Action { get; set; }
         public IEnumerable<Claim> Resource { get; set; }
         public ClaimsPrincipal Principal { get; set; }
+        public CancellationToken CancellationToken { get; set; }
 
-        public ResourceAuthorizationContext(ClaimsPrincipal principal, IEnumerable<Claim> action, IEnumerable<Claim> resource)
+        public ResourceAuthorizationContext(ClaimsPrincipal principal, IEnumerable<Claim> action, IEnumerable<Claim> resource, CancellationToken cancellationToken = default(CancellationToken))
         {
             if (action == null)
             {
@@ -31,9 +33,10 @@ namespace Thinktecture.IdentityModel.Owin.ResourceAuthorization
             Action = action;
             Resource = resource;
             Principal = principal;
+            CancellationToken = cancellationToken;
         }
 
-        public ResourceAuthorizationContext(ClaimsPrincipal principal, string action, params string[] resource)
+        public ResourceAuthorizationContext(CancellationToken cancellationToken, ClaimsPrincipal principal, string action, params string[] resource)
         {
             if (string.IsNullOrWhiteSpace(action))
             {
@@ -53,6 +56,7 @@ namespace Thinktecture.IdentityModel.Owin.ResourceAuthorization
             Action = new List<Claim> { new Claim("name", action) };
             Resource = new List<Claim>(from r in resource select new Claim("name", r));
             Principal = principal;
+            CancellationToken = cancellationToken;
         }
     }
 }

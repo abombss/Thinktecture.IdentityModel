@@ -20,10 +20,10 @@ namespace System.Web
         {
             var cp = httpContext.User as ClaimsPrincipal;
             var authorizationContext = new ResourceAuthorizationContext(
+                httpContext.Response.ClientDisconnectedToken,
                 cp ?? Principal.Anonymous,
                 action,
                 resources);
-
             return httpContext.CheckAccessAsync(authorizationContext);
         }
 

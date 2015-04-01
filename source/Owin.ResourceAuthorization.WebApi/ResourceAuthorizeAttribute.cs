@@ -9,12 +9,15 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Security.Claims;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Web.Http;
 using System.Web.Http.Controllers;
+using System.Web.Http.Filters;
 
 namespace Thinktecture.IdentityModel.WebApi
 {
-    public class ResourceAuthorizeAttribute : AuthorizeAttribute
+    public class ResourceAuthorizeAttribute : FilterAttribute, IAuthorizationFilter
     {
         private string _action;
         private string[] _resources;
@@ -28,13 +31,16 @@ namespace Thinktecture.IdentityModel.WebApi
             _resources = resources;
         }
 
-        protected override bool IsAuthorized(HttpActionContext actionContext)
+        public async Task<HttpResponseMessage> ExecuteAuthorizationFilterAsync(
+            HttpActionContext actionContext,
+            CancellationToken cancellationToken,
+            Func<Task<HttpResponseMessage>> continuation)
         {
             var actions = new List<Claim>();
-            
+
             var action = ActionFromAttribute();
             if (action != null) actions.Add(action);
-            
+
             actions.Add(actionContext.ActionFromController());
 
             var resources = new List<Claim>();
@@ -46,21 +52,25 @@ namespace Thinktecture.IdentityModel.WebApi
             var routeClaims = actionContext.ResourcesFromRouteParameters().Where(x => x.Type != "controller");
             resources.AddRange(routeClaims);
 
-            return CheckAccess(actionContext.Request, actions.ToArray(), resources.Distinct(new ClaimComparer()).ToArray());
+            var result =
+                await
+                    CheckAccessAsync(
+                        actionContext.Request,
+                        actions.ToArray(),
+                        resources.Distinct(new ClaimComparer()).ToArray(),
+                        cancellationToken);
+
+            if (!result)
+            {
+                return HandleUnauthorizedRequest(actionContext);
+            }
+
+            return await continuation();
         }
 
-        protected virtual bool CheckAccess(HttpRequestMessage request, Claim[] actions, params Claim[] resources)
+        protected virtual Task<bool> CheckAccessAsync(HttpRequestMessage request, Claim[] actions, Claim[] resources, CancellationToken cancellationToken)
         {
-            var task = request.CheckAccessAsync(actions, resources);
-
-            if (task.Wait(5000))
-            {
-                return task.Result;
-            }
-            else
-            {
-                throw new TimeoutException();
-            }
+            return request.CheckAccessAsync(actions, resources, cancellationToken);
         }
 
         private Claim ActionFromAttribute()
@@ -78,18 +88,16 @@ namespace Thinktecture.IdentityModel.WebApi
             return null;
         }
 
-        protected override void HandleUnauthorizedRequest(HttpActionContext actionContext)
+        protected HttpResponseMessage HandleUnauthorizedRequest(HttpActionContext actionContext)
         {
             if (actionContext.ControllerContext.RequestContext.Principal != null &&
                 actionContext.ControllerContext.RequestContext.Principal.Identity != null &&
                 actionContext.ControllerContext.RequestContext.Principal.Identity.IsAuthenticated)
             {
-                actionContext.Response = actionContext.ControllerContext.Request.CreateErrorResponse(HttpStatusCode.Forbidden, "Forbidden");
+                return actionContext.ControllerContext.Request.CreateErrorResponse(HttpStatusCode.Forbidden, "Forbidden");
             }
-            else
-            {
-                actionContext.Response = actionContext.ControllerContext.Request.CreateErrorResponse(HttpStatusCode.Unauthorized, "Unauthorized");
-            }
+
+            return actionContext.ControllerContext.Request.CreateErrorResponse(HttpStatusCode.Unauthorized, "Unauthorized");
         }
     }
 }

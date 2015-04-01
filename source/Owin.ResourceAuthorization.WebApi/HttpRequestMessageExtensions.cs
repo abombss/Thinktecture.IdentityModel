@@ -7,6 +7,7 @@ using Microsoft.Owin;
 using System.Linq;
 using System.Collections.Generic;
 using System.Security.Claims;
+using System.Threading;
 using System.Threading.Tasks;
 using Thinktecture.IdentityModel;
 using Thinktecture.IdentityModel.Owin.ResourceAuthorization;
@@ -18,25 +19,26 @@ namespace System.Net.Http
     {
         public static bool CheckAccess(this HttpRequestMessage request, string action, params string[] resources)
         {
-            return AsyncHelper.RunSync(() => request.CheckAccessAsync(action, resources));
+            return AsyncHelper.RunSync(() => request.CheckAccessAsync(action, CancellationToken.None, resources));
         }
 
-        public static Task<bool> CheckAccessAsync(this HttpRequestMessage request, string action, params string[] resources)
+        public static Task<bool> CheckAccessAsync(this HttpRequestMessage request, string action, CancellationToken cancellationToken, params string[] resources)
         {
             var user = request.GetRequestContext().Principal as ClaimsPrincipal;
             user = user ?? Principal.Anonymous;
             
-            var ctx = new ResourceAuthorizationContext(user, action, resources);
+            var ctx = new ResourceAuthorizationContext(cancellationToken, user, action, resources);
             
             return request.CheckAccessAsync(ctx);
         }
         
-        public static Task<bool> CheckAccessAsync(this HttpRequestMessage request, IEnumerable<Claim> actions, IEnumerable<Claim> resources)
+        public static Task<bool> CheckAccessAsync(this HttpRequestMessage request, IEnumerable<Claim> actions, IEnumerable<Claim> resources, CancellationToken cancellationToken)
         {
             var authorizationContext = new ResourceAuthorizationContext(
                 request.GetOwinContext().Authentication.User ?? Principal.Anonymous,
                 actions,
-                resources);
+                resources,
+                cancellationToken);
 
             return request.CheckAccessAsync(authorizationContext);
         }
